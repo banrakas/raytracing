@@ -1,0 +1,14 @@
+{
+    "C_Cpp.default.configurationProvider": "ms-vscode.makefile-tools",
+    "makefile.launchConfigurations": [
+        {
+            "cwd": "/home/archbishop/Projects/raytracing",
+            "binaryPath": "/home/archbishop/Projects/raytracing/raytracer",
+            "binaryArgs": []
+        }
+    ],
+    "C_Cpp.errorSquiggles": "disabled",
+    "files.associations": {
+        "util.h": "c"
+    }
+}

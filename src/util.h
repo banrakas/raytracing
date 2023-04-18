@@ -1,6 +1,7 @@
 #pragma once
 
 #include <math.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 typedef float f32;
@@ -25,9 +26,14 @@ typedef vec3 point3;
 /* Colour ought to be b/w 0 and 1 */
 typedef vec3 color3;
 
+typedef struct {
+    uint8_t r, g, b, a;
+} color4;
+
 #define vec3(x, y, z) ((vec3) { .data = { x, y, z } })
 #define point3(x, y, z) vec3(x, y, z)
 #define color3(r, g, b) vec3(r, g, b)
+#define color4(r, g, b, a) ((color4) { r, g, b, a })
 
 inline vec3 add(vec3 a, vec3 b)
 {

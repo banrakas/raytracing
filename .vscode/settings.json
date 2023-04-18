@@ -9,6 +9,19 @@
     ],
     "C_Cpp.errorSquiggles": "disabled",
     "files.associations": {
-        "util.h": "c"
+        "util.h": "c",
+        "float.h": "c",
+        "stddef.h": "c",
+        "math.h": "c",
+        "cmath": "c",
+        "array": "c",
+        "compare": "c",
+        "functional": "c",
+        "ratio": "c",
+        "tuple": "c",
+        "type_traits": "c",
+        "utility": "c",
+        "variant": "c",
+        "hittable.h": "c"
     }
 }

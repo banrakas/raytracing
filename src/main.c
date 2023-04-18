@@ -5,99 +5,45 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "camera.h"
+#include "hittable.h"
+#include "material.h"
 #include "util.h"
 
-struct hit_record {
-    point3 point; // point of intersection
-    vec3 normal;
-    float t; // ray = origin + dir * t
-    bool frontface;
-};
-
-inline void set_face_normal(struct hit_record* rec, const ray* r, const vec3* outward_normal)
+inline vec3 vector_random_inside_unit_sphere()
 {
-    rec->frontface = dot(r->dir, outward_normal) < 0.0;
-    rec->normal = rec->frontface ? outward_normal : scalarmul(outward_normal, -1.0);
+    vec3 dir = vec3(randomf(), randomf(), randomf());
+    while (lensquared(dir) > 1)
+        dir = vec3(randomf(), randomf(), randomf());
+    return dir;
 }
 
-typedef struct {
-    point3 centre;
-    float radius;
-} sphere;
-
-bool sphere_hit(const sphere* sp, const ray* r,
-    float t_min, float t_max, struct hit_record* hit_record)
+vec3 vector_unit_random1()
 {
-    const vec3 oc = sub(r->origin, sp->centre);
-    const float a = lensquared(r->dir);
-    const float b_2 = dot(r->dir, oc);
-    const float c = lensquared(oc) - sp->radius * sp->radius;
-
-    const float discriminant = b_2 * b_2 - a * c;
-
-    if (discriminant < 0)
-        return false;
-
-    const float sqrtd = sqrt(discriminant);
-    float root = (-b_2 - sqrtd) / a;
-
-    if (root < t_min || root > t_max) {
-        root = (-b_2 + sqrtd) / a;
-
-        if (root < t_min || root > t_max)
-            return false;
-    }
-
-    hit_record->t = root;
-    hit_record->point = ray_at(*r, root);
-
-    set_face_normal(hit_record, r, &scalarmul(sub(hit_record->point, sp->centre), 1 / sp->radius));
-
-    return true;
+    return unit_vector(vector_random_inside_unit_sphere());
 }
 
-typedef struct {
-    enum {
-        SPHERE,
-    } type;
-    union {
-        sphere sphere;
-    };
-} hittable;
-
-typedef struct {
-    hittable* objects;
-    size_t len;
-    size_t cap;
-} hittable_list;
-
-hittable_list hittable_list_new(size_t cap)
+vec3 vector_unit_random2(const vec3* normal)
 {
-    hittable_list lst = {
-        .objects = malloc(sizeof(hittable) * cap),
-        .len = 0,
-        .cap = cap
-    };
-    return lst;
+    vec3 out = vector_random_inside_unit_sphere();
+
+    if (dot(out, *normal) > 0.0)
+        return out;
+    else
+        return scalarmul(out, -1.0);
 }
 
-void hittable_list_push(hittable_list* lst, const hittable obj)
+color3 ray_color(const ray* restrict r, const hittable_list* restrict lst, int depth)
 {
-    if (lst->len == lst->cap)
-        lst->objects = realloc(lst->objects, sizeof(hittable) * (lst->len + 1));
-
-    lst->objects[len] = obj;
-    ++lst->len;
-    ++lst->cap;
-}
-
-color3 ray_color(const ray* r)
-{
-    const sphere sp = { .centre = { .x = 0.3, .y = -0.45, .z = -2.0 }, .radius = 0.5 };
     struct hit_record rec = {};
 
-    if (sphere_hit(&sp, r, 0, 1000, &rec))
-        return scalarmul(add(rec.normal, (color3) { .data = { 1.0, 1.0, 1.0 } }), 0.5);
+    if (is_hit(r, lst, 0.001, INFINITY, &rec) && depth >= 0) {
+        vec3 newray_target = add(rec.point, vector_unit_random2(&rec.normal));
+        // vec3 newray_target = add(add(rec.point, rec.normal), vector_unit_random1());
+        return scalarmul(ray_color(&(ray) { .origin = rec.point, .dir = newray_target },
+                             lst, depth - 1),
+            0.5);
+    }
 
     // Gives background color
     vec3 unit_dir = unit_vector(r->dir);
@@ -106,12 +52,16 @@ color3 ray_color(const ray* r)
         scalarmul((color3) { .r = 0.5, .g = 0.7, .b = 1.0 }, t));
 }
 
-inline void write_color(FILE* out, color3 color)
+inline void write_color(FILE* out, color3 accumluted_color, uint32_t samples_per_pixel)
 {
+    float r = sqrtf(accumluted_color.r / samples_per_pixel); // Gamma correction
+    float g = sqrtf(accumluted_color.g / samples_per_pixel);
+    float b = sqrtf(accumluted_color.b / samples_per_pixel);
+
     fprintf(out, "%d %d %d\n",
-        (uint8_t)(color.r * 255),
-        (uint8_t)(color.g * 255),
-        (uint8_t)(color.b * 255));
+        (uint8_t)(255.999 * clamp(r, 0.0, 1.0)),
+        (uint8_t)(255.999 * clamp(g, 0.0, 1.0)),
+        (uint8_t)(255.999 * clamp(b, 0.0, 1.0)));
 }
 
 int main(void)
@@ -122,42 +72,50 @@ int main(void)
     const float aspect_ratio = 16.0 / 9.0;
     const uint16_t width = 1024;
     const uint16_t height = width / aspect_ratio;
+    const uint32_t samples_per_pixel = 10;
+    const int max_depth = 2;
+
+    // World
+
+    hittable_list world = hittable_list_new(5);
+    hittable_list_push(&world, SPHERE, (union primitives) { sphere(0.1, -0.1, -1.3, 0.5) });
+    hittable_list_push(&world, SPHERE, (union primitives) { sphere(0.0, -100.5, -1.0, 100) });
+    hittable_list_push(&world, SPHERE, (union primitives) { sphere(-0.5, -0.1, -1.0, 0.4) });
+    hittable_list_push(&world, SPHERE, (union primitives) { sphere(1.0, -0.1, -2, 0.6) });
 
     // Camera
 
     const float viewport_height = 2.0;
     const float viewport_width = viewport_height * aspect_ratio;
-    const float focal_length = 1.0;
 
-    const point3 origin = { .x = 0.0, .y = 0.0, .z = 0.0 };
-    const vec3 horizontal = { .x = viewport_width, .y = 0.0, .z = 0.0 };
-    const vec3 vertical = { .x = 0.0, .y = viewport_height, .z = 0.0 };
-    const vec3 lower_left_corner = add(
-        add(origin, (vec3) { .data = { 0.0, 0.0, -focal_length } }),
-        add(scalarmul(horizontal, -0.5), scalarmul(vertical, -0.5)));
+    camera camera = camera_new(1.0,
+        vec3(viewport_width, 0.0, 0.0),
+        vec3(0.0, viewport_height, 0.0),
+        vec3(0.0, 0.0, 0.0));
 
     // Render
 
     fprintf(output, "P3\n%d %d\n255\n", width, height);
 
     for (int16_t i = height - 1; i >= 0; --i) {
-        fprintf(stderr, "scan lines remaining: %d\r", i);
+        fprintf(stderr, "lines remaining: %d\r", i);
 
         for (uint16_t j = 0; j < width; ++j) {
-            const float u = (float)j / (width - 1);
-            const float v = (float)i / (height - 1);
+            color3 accumulated_color = color3(0.0, 0.0, 0.0);
 
-            ray r = {
-                .origin = origin,
-                .dir = add(
-                    sub(lower_left_corner, origin),
-                    add(scalarmul(horizontal, u), scalarmul(vertical, v)))
-            };
+            for (uint32_t k = 0; k < samples_per_pixel; ++k) {
+                const float u = (j + randomf()) / (width - 1);
+                const float v = (i + randomf()) / (height - 1);
 
-            color3 color = ray_color(&r);
-            write_color(output, color);
+                ray r = camera_get_ray(camera, u, v);
+
+                accumulated_color = add(ray_color(&r, &world, max_depth), accumulated_color);
+            }
+            write_color(output, accumulated_color, samples_per_pixel);
         }
     }
+
+    hittable_list_destroy(&world);
 
     return 0;
 }

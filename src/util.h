@@ -1,6 +1,7 @@
 #pragma once
 
 #include <math.h>
+#include <stdlib.h>
 
 typedef float f32;
 typedef double f64;
@@ -23,6 +24,10 @@ typedef vec3 point3;
 
 /* Colour ought to be b/w 0 and 1 */
 typedef vec3 color3;
+
+#define vec3(x, y, z) ((vec3) { .data = { x, y, z } })
+#define point3(x, y, z) vec3(x, y, z)
+#define color3(r, g, b) vec3(r, g, b)
 
 inline vec3 add(vec3 a, vec3 b)
 {
@@ -81,4 +86,23 @@ typedef struct {
 inline point3 ray_at(ray r, float t)
 {
     return add(r.origin, scalarmul(r.dir, t));
+}
+
+inline float degree_to_radian(float degree)
+{
+    return M_PI * degree / 180;
+}
+
+inline float randomf()
+{
+    return (float)rand() / RAND_MAX;
+}
+
+inline float clamp(float x, float min, float max)
+{
+    if (x < min)
+        return min;
+    if (x > max)
+        return max;
+    return x;
 }
